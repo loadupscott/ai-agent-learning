@@ -21,3 +21,5 @@ tavily-python
 firecrawl-py
 fpdf2
 python-dotenv
+yfinance
+pandas
