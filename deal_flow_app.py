@@ -7,8 +7,8 @@ from tavily import TavilyClient
 from firecrawl import Firecrawl
 from fpdf import FPDF
 
-# Set page config to 'Wide Mode' with a title '💰 Deal Flow Analyst'
-st.set_page_config(page_title="💰 Deal Flow Analyst", page_icon="💰", layout="wide")
+# Set page config to 'Wide Mode' with a title '💰 SWOT Analysis'
+st.set_page_config(page_title="💰 SWOT Analysis", page_icon="💰", layout="wide")
 
 # Load API keys from .env
 load_dotenv()
@@ -191,7 +191,7 @@ def save_pdf(company_name, swot_data):
 
 
 # The Sidebar
-st.sidebar.header('💰 Deal Flow Analyst')
+st.sidebar.header('💰 SWOT Analysis')
 company_name = st.sidebar.text_input('Company Name', placeholder='Enter company name...')
 generate_button = st.sidebar.button('Generate Memo', type='primary')
 
@@ -299,7 +299,7 @@ if generate_button:
 
 else:
     # Initial state - show welcome message
-    st.title('💰 Deal Flow Analyst')
+    st.title('💰 SWOT Analysis')
     st.markdown("""
     ### Welcome to the Investment Memo Generator! 📊
     
@@ -308,5 +308,5 @@ else:
     2. Click "Generate Memo" to create a comprehensive SWOT analysis
     3. Review the analysis and download the PDF memo
     
-    Get started by entering a company name in the sidebar! 👉
+    Get started by entering a company name in the sidebar! 👈
     """)
