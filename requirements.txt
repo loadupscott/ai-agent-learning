@@ -19,5 +19,5 @@ streamlit
 openai
 tavily-python
 firecrawl-py
-fpdf
+fpdf2
 python-dotenv
