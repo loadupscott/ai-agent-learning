@@ -7,8 +7,8 @@ from tavily import TavilyClient
 from firecrawl import Firecrawl
 from fpdf import FPDF
 
-# Set page config to 'Wide Mode' with a title '💰 Company Analysis'
-st.set_page_config(page_title="💰 Company Analysis", page_icon="💰", layout="wide")
+# Set page config to 'Wide Mode' with a title '💰 Scott's Company Analysis'
+st.set_page_config(page_title="💰 Scott's Company Analysis", page_icon="💰", layout="wide")
 
 # Load API keys from .env
 load_dotenv()
@@ -275,7 +275,7 @@ def save_pdf(company_name, swot_data):
 
 
 # The Sidebar
-st.sidebar.header('💰 Company Analysis')
+st.sidebar.header("💰 Scott's Company Analysis")
 company_name = st.sidebar.text_input('Company Name', placeholder='Enter company name...')
 generate_button = st.sidebar.button('Generate Memo', type='primary')
 
@@ -406,9 +406,9 @@ if generate_button:
 
 else:
     # Initial state - show welcome message
-    st.title('💰 Company Analysis')
+    st.title("💰 Scott's Company Analysis")
     st.markdown("""
-    ### Welcome to the Company Analysis Memo Generator! 📊
+    ### Welcome to Scott's Company Analysis Memo Generator! 📊
     
     **Instructions:**
     1. Enter a company name in the sidebar
