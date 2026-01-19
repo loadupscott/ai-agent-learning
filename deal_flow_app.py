@@ -330,7 +330,7 @@ if generate_button:
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.markdown("### ✅ Strengths")
+                    st.subheader("✅ Strengths")
                     strengths = swot_data.get('strengths', [])
                     if strengths:
                         for strength in strengths:
@@ -339,7 +339,7 @@ if generate_button:
                         st.markdown("*No strengths listed*")
                 
                 with col2:
-                    st.markdown("### ⚠️ Weaknesses")
+                    st.subheader("⚠️ Weaknesses")
                     weaknesses = swot_data.get('weaknesses', [])
                     if weaknesses:
                         for weakness in weaknesses:
@@ -348,7 +348,7 @@ if generate_button:
                         st.markdown("*No weaknesses listed*")
                 
                 with col3:
-                    st.markdown("### 🚀 Opportunities")
+                    st.subheader("🚀 Opportunities")
                     opportunities = swot_data.get('opportunities', [])
                     if opportunities:
                         for opportunity in opportunities:
@@ -357,7 +357,7 @@ if generate_button:
                         st.markdown("*No opportunities listed*")
                 
                 with col4:
-                    st.markdown("### 🛡️ Threats")
+                    st.subheader("🛡️ Threats")
                     threats = swot_data.get('threats', [])
                     if threats:
                         for threat in threats:
