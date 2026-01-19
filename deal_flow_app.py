@@ -589,13 +589,13 @@ if generate_button:
                     # Format as "Exchange: TICKER" (e.g., "TSX: SHOP")
                     ticker_info = f"{exchange}: {ticker_clean}" if exchange else ticker_clean
                     st.markdown(f"""
-                    <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h1 style="margin: 0;">{display_name} <span style="font-weight: normal; font-size: 0.5em; color: #666;">({ticker_info})</span></h1>
+                    <div style="background-color: rgba(128, 128, 128, 0.1); padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(128, 128, 128, 0.2);">
+                        <h1 style="margin: 0;">{display_name} <span style="font-weight: normal; font-size: 0.5em; opacity: 0.7;">({ticker_info})</span></h1>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                    <div style="background-color: rgba(128, 128, 128, 0.1); padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(128, 128, 128, 0.2);">
                         <h1 style="margin: 0;">{display_name}</h1>
                     </div>
                     """, unsafe_allow_html=True)
@@ -662,7 +662,7 @@ if generate_button:
                 # Styled Executive Summary with blue border
                 executive_summary = swot_data.get('executive_summary', swot_data.get('summary', 'No summary available.'))
                 st.markdown(f"""
-                <div style="border-left: 5px solid #1E90FF; padding: 15px; background-color: #f0f8ff; border-radius: 5px;">
+                <div style="border-left: 5px solid #1E90FF; padding: 15px; background-color: rgba(30, 144, 255, 0.1); border-radius: 5px;">
                     <h4 style="margin-top: 0;">Executive Summary</h4>
                     <p>{executive_summary}</p>
                 </div>
@@ -686,8 +686,8 @@ if generate_button:
 
                 with row1_col1:
                     st.markdown("""
-                    <div style="background-color: #d4edda; padding: 10px 15px; border-radius: 8px 8px 0 0;">
-                        <span style="color: #155724; font-weight: bold;">✅ Strengths</span>
+                    <div style="background-color: rgba(40, 167, 69, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #28a745; font-weight: bold;">✅ Strengths</span>
                     </div>
                     """, unsafe_allow_html=True)
                     strengths = swot_data.get('strengths', [])
@@ -699,8 +699,8 @@ if generate_button:
 
                 with row1_col2:
                     st.markdown("""
-                    <div style="background-color: #f8d7da; padding: 10px 15px; border-radius: 8px 8px 0 0;">
-                        <span style="color: #721c24; font-weight: bold;">⚠️ Weaknesses</span>
+                    <div style="background-color: rgba(220, 53, 69, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #dc3545; font-weight: bold;">⚠️ Weaknesses</span>
                     </div>
                     """, unsafe_allow_html=True)
                     weaknesses = swot_data.get('weaknesses', [])
@@ -717,8 +717,8 @@ if generate_button:
 
                 with row2_col1:
                     st.markdown("""
-                    <div style="background-color: #cce5ff; padding: 10px 15px; border-radius: 8px 8px 0 0;">
-                        <span style="color: #004085; font-weight: bold;">🚀 Opportunities</span>
+                    <div style="background-color: rgba(0, 123, 255, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #007bff; font-weight: bold;">🚀 Opportunities</span>
                     </div>
                     """, unsafe_allow_html=True)
                     opportunities = swot_data.get('opportunities', [])
@@ -730,8 +730,8 @@ if generate_button:
 
                 with row2_col2:
                     st.markdown("""
-                    <div style="background-color: #fff3cd; padding: 10px 15px; border-radius: 8px 8px 0 0;">
-                        <span style="color: #856404; font-weight: bold;">🛡️ Threats</span>
+                    <div style="background-color: rgba(255, 193, 7, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #ffc107; font-weight: bold;">🛡️ Threats</span>
                     </div>
                     """, unsafe_allow_html=True)
                     threats = swot_data.get('threats', [])
