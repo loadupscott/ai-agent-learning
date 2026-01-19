@@ -301,7 +301,7 @@ else:
     # Initial state - show welcome message
     st.title('💰 SWOT Analysis')
     st.markdown("""
-    ### Welcome to the Investment Memo Generator! 📊
+    ### Welcome to the SWOT Analysis Memo Generator! 📊
     
     **Instructions:**
     1. Enter a company name in the sidebar
