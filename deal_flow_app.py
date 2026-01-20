@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import streamlit as st
+import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
 from tavily import TavilyClient
@@ -221,6 +222,162 @@ def analyze_website(url):
         return ""
 
 
+def get_competitors(company_name, industry=None):
+    """Use AI and web search to identify top competitors for a company."""
+    # Search for competitors
+    query = f'{company_name} main competitors rivals'
+    if industry:
+        query += f' {industry}'
+
+    search_response = tavily_client.search(
+        query=query,
+        max_results=5
+    )
+
+    search_context = ""
+    for result in search_response.get('results', []):
+        search_context += f"Title: {result.get('title', '')}\n"
+        search_context += f"Content: {result.get('content', '')[:500]}\n\n"
+
+    prompt = f"""Based on the following search results about {company_name}'s competitors, identify the top 3-5 main competitors.
+
+SEARCH RESULTS:
+{search_context}
+
+Return valid JSON with:
+{{
+    "competitors": [
+        {{
+            "name": "Competitor company name (official name)",
+            "reason": "Brief explanation of why they are a competitor (1 sentence)"
+        }}
+    ]
+}}
+
+IMPORTANT:
+- Only include direct competitors in the same industry/market
+- Use official company names (e.g., "Apple Inc." not "Apple")
+- Order by relevance (most direct competitor first)
+- Return 3-5 competitors maximum"""
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a market research analyst. Return only valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0
+    )
+
+    result = json.loads(response.choices[0].message.content)
+    return result.get('competitors', [])
+
+
+def fetch_competitor_data(competitor_name):
+    """Fetch basic info and stock data for a competitor."""
+    # Check if publicly traded
+    ticker = get_ticker_symbol(competitor_name)
+
+    competitor_data = {
+        "name": competitor_name,
+        "ticker": ticker,
+        "is_public": ticker is not None
+    }
+
+    # If public, fetch stock data
+    if ticker:
+        stock_data = fetch_stock_data(ticker)
+        if stock_data:
+            competitor_data.update({
+                "current_price": stock_data.get('current_price'),
+                "market_cap": stock_data.get('market_cap'),
+                "pe_ratio": stock_data.get('pe_ratio'),
+                "year_return": stock_data.get('year_return'),
+                "revenue": stock_data.get('revenue'),
+                "profit_margin": stock_data.get('profit_margin'),
+                "employees": stock_data.get('employees'),
+                "sector": stock_data.get('sector'),
+                "industry": stock_data.get('industry'),
+                "currency_symbol": stock_data.get('currency_symbol', '$'),
+                "exchange": stock_data.get('exchange', '')
+            })
+
+    return competitor_data
+
+
+def generate_competitive_analysis(company_name, company_stock_data, competitors_data):
+    """Generate AI-powered competitive analysis comparing the company to its competitors."""
+
+    # Build company context
+    company_context = f"TARGET COMPANY: {company_name}\n"
+    if company_stock_data:
+        curr_sym = company_stock_data.get('currency_symbol', '$')
+        company_context += f"""
+- Market Cap: {format_market_cap(company_stock_data.get('market_cap'))}
+- P/E Ratio: {company_stock_data.get('pe_ratio', 'N/A')}
+- 1-Year Return: {f"{company_stock_data.get('year_return'):.1f}%" if company_stock_data.get('year_return') else 'N/A'}
+- Revenue: {format_market_cap(company_stock_data.get('revenue'))}
+- Profit Margin: {f"{company_stock_data.get('profit_margin')*100:.1f}%" if company_stock_data.get('profit_margin') else 'N/A'}
+- Employees: {f"{company_stock_data.get('employees'):,}" if company_stock_data.get('employees') else 'N/A'}
+- Industry: {company_stock_data.get('industry', 'N/A')}
+"""
+    else:
+        company_context += "- Private company (no public financial data)\n"
+
+    # Build competitors context
+    competitors_context = "\nCOMPETITORS:\n"
+    for comp in competitors_data:
+        competitors_context += f"\n{comp.get('name')}:\n"
+        if comp.get('is_public') and comp.get('market_cap'):
+            curr_sym = comp.get('currency_symbol', '$')
+            competitors_context += f"""  - Market Cap: {format_market_cap(comp.get('market_cap'))}
+  - P/E Ratio: {comp.get('pe_ratio', 'N/A')}
+  - 1-Year Return: {f"{comp.get('year_return'):.1f}%" if comp.get('year_return') else 'N/A'}
+  - Revenue: {format_market_cap(comp.get('revenue'))}
+  - Profit Margin: {f"{comp.get('profit_margin')*100:.1f}%" if comp.get('profit_margin') else 'N/A'}
+  - Employees: {f"{comp.get('employees'):,}" if comp.get('employees') else 'N/A'}
+"""
+        else:
+            competitors_context += "  - Private company or data unavailable\n"
+
+    prompt = f"""You are a senior equity research analyst preparing a competitive analysis for investors.
+
+{company_context}
+{competitors_context}
+
+Provide a comprehensive competitive analysis. Return valid JSON:
+{{
+    "competitive_position": "A 2-3 sentence summary of {company_name}'s competitive position in the market",
+    "market_share_assessment": "Assessment of relative market positioning based on available data",
+    "key_differentiators": [
+        "3-4 key factors that differentiate {company_name} from competitors"
+    ],
+    "competitive_advantages": [
+        "2-3 specific advantages {company_name} has over competitors"
+    ],
+    "competitive_disadvantages": [
+        "2-3 areas where competitors have an edge"
+    ],
+    "valuation_comparison": "How {company_name}'s valuation (P/E, market cap) compares to peers",
+    "competitive_outlook": "2-3 sentences on the competitive landscape outlook and what it means for {company_name}"
+}}
+
+Be specific and use the financial data provided. If data is limited, acknowledge uncertainty."""
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a senior equity research analyst. Provide data-driven competitive analysis."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.5
+    )
+
+    return json.loads(response.choices[0].message.content)
+
+
 def generate_swot(company_name, search_summary, website_content, stock_data=None):
     """Generate sophisticated investment analysis using gpt-4o for deeper insights."""
 
@@ -335,8 +492,8 @@ def sanitize_text(text):
         return ''.join(c if ord(c) < 256 else '?' for c in result)
 
 
-def save_pdf(company_name, swot_data, stock_data=None):
-    """Use FPDF to create a clean PDF with SWOT analysis and financial metrics."""
+def save_pdf(company_name, swot_data, stock_data=None, competitive_analysis=None, competitors_data=None):
+    """Use FPDF to create a clean PDF with SWOT analysis, financial metrics, and competitive analysis."""
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -492,7 +649,143 @@ def save_pdf(company_name, swot_data, stock_data=None):
         if sanitized_threat.strip():
             pdf.multi_cell(effective_width, 6, sanitized_threat)
     pdf.ln(5)
-    
+
+    # Competitive Analysis Section
+    if competitive_analysis:
+        pdf.add_page()  # Start competitive analysis on new page
+        pdf.set_font("Arial", "B", 16)
+        pdf.set_text_color(128, 0, 128)  # Purple
+        pdf.cell(effective_width, 10, "Competitive Analysis", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
+
+        # Competitive Position
+        comp_position = competitive_analysis.get('competitive_position', '')
+        if comp_position:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Competitive Position", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Arial", "", 11)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(effective_width, 6, sanitize_text(comp_position))
+            pdf.ln(3)
+
+        # Competitor Table
+        if competitors_data:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Key Competitors", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Arial", "", 10)
+
+            # Table header
+            col_widths = [50, 35, 25, 25, 30]
+            pdf.set_font("Arial", "B", 9)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(col_widths[0], 6, "Company", border=1)
+            pdf.cell(col_widths[1], 6, "Market Cap", border=1)
+            pdf.cell(col_widths[2], 6, "P/E", border=1)
+            pdf.cell(col_widths[3], 6, "1Y Return", border=1)
+            pdf.cell(col_widths[4], 6, "Revenue", border=1, new_x="LMARGIN", new_y="NEXT")
+
+            # Add target company row first
+            if stock_data:
+                pdf.set_font("Arial", "B", 9)
+                pdf.set_x(pdf.l_margin)
+                target_name = sanitize_text(f"{company_name[:15]}..." if len(company_name) > 15 else company_name)
+                pdf.cell(col_widths[0], 6, target_name, border=1)
+                pdf.set_font("Arial", "", 9)
+                pdf.cell(col_widths[1], 6, format_market_cap(stock_data.get('market_cap')) if stock_data.get('market_cap') else "Private", border=1)
+                pdf.cell(col_widths[2], 6, f"{stock_data.get('pe_ratio'):.1f}" if stock_data.get('pe_ratio') else "N/A", border=1)
+                pdf.cell(col_widths[3], 6, f"{stock_data.get('year_return'):.1f}%" if stock_data.get('year_return') else "N/A", border=1)
+                pdf.cell(col_widths[4], 6, format_market_cap(stock_data.get('revenue')) if stock_data.get('revenue') else "N/A", border=1, new_x="LMARGIN", new_y="NEXT")
+
+            # Competitor rows
+            pdf.set_font("Arial", "", 9)
+            for comp in competitors_data:
+                pdf.set_x(pdf.l_margin)
+                comp_name = sanitize_text(comp.get('name', 'N/A'))
+                comp_name_display = f"{comp_name[:15]}..." if len(comp_name) > 15 else comp_name
+                pdf.cell(col_widths[0], 6, comp_name_display, border=1)
+                pdf.cell(col_widths[1], 6, format_market_cap(comp.get('market_cap')) if comp.get('market_cap') else "Private", border=1)
+                pdf.cell(col_widths[2], 6, f"{comp.get('pe_ratio'):.1f}" if comp.get('pe_ratio') else "N/A", border=1)
+                pdf.cell(col_widths[3], 6, f"{comp.get('year_return'):.1f}%" if comp.get('year_return') else "N/A", border=1)
+                pdf.cell(col_widths[4], 6, format_market_cap(comp.get('revenue')) if comp.get('revenue') else "N/A", border=1, new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(5)
+
+        # Competitive Advantages (Green)
+        advantages = competitive_analysis.get('competitive_advantages', [])
+        if advantages:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_text_color(34, 139, 34)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Competitive Advantages", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 11)
+            for adv in advantages:
+                pdf.set_x(pdf.l_margin)
+                sanitized_adv = sanitize_text(f"- {adv}")
+                if sanitized_adv.strip():
+                    pdf.multi_cell(effective_width, 6, sanitized_adv)
+            pdf.ln(3)
+
+        # Competitive Disadvantages (Red)
+        disadvantages = competitive_analysis.get('competitive_disadvantages', [])
+        if disadvantages:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_text_color(178, 34, 34)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Competitive Disadvantages", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 11)
+            for disadv in disadvantages:
+                pdf.set_x(pdf.l_margin)
+                sanitized_disadv = sanitize_text(f"- {disadv}")
+                if sanitized_disadv.strip():
+                    pdf.multi_cell(effective_width, 6, sanitized_disadv)
+            pdf.ln(3)
+
+        # Key Differentiators
+        differentiators = competitive_analysis.get('key_differentiators', [])
+        if differentiators:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_text_color(0, 51, 102)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Key Differentiators", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 11)
+            for diff in differentiators:
+                pdf.set_x(pdf.l_margin)
+                sanitized_diff = sanitize_text(f"- {diff}")
+                if sanitized_diff.strip():
+                    pdf.multi_cell(effective_width, 6, sanitized_diff)
+            pdf.ln(3)
+
+        # Valuation Comparison
+        valuation_comp = competitive_analysis.get('valuation_comparison', '')
+        if valuation_comp:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_text_color(0, 51, 102)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Valuation Comparison", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 11)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(effective_width, 6, sanitize_text(valuation_comp))
+            pdf.ln(3)
+
+        # Competitive Outlook
+        comp_outlook = competitive_analysis.get('competitive_outlook', '')
+        if comp_outlook:
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_text_color(0, 51, 102)
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(effective_width, 8, "Competitive Outlook", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 11)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(effective_width, 6, sanitize_text(comp_outlook))
+            pdf.ln(5)
+
     # Strategic Recommendations
     strategic_recs = swot_data.get('strategic_recommendations', [])
     if strategic_recs:
@@ -569,8 +862,28 @@ if generate_button:
 
                 # Step 5: Generate Analysis with stock context
                 status_text.text('Analyzing data and generating company analysis...')
-                progress_bar.progress(75)
+                progress_bar.progress(60)
                 swot_data = generate_swot(company_name, search_summary, website_content, stock_data)
+
+                # Step 6: Identify competitors
+                status_text.text('Identifying competitors...')
+                progress_bar.progress(70)
+                industry = stock_data.get('industry') if stock_data else None
+                competitors = get_competitors(company_name, industry)
+
+                # Step 7: Fetch competitor data
+                status_text.text('Fetching competitor data...')
+                progress_bar.progress(80)
+                competitors_data = []
+                for comp in competitors[:4]:  # Limit to 4 competitors
+                    comp_data = fetch_competitor_data(comp.get('name', ''))
+                    comp_data['reason'] = comp.get('reason', '')
+                    competitors_data.append(comp_data)
+
+                # Step 8: Generate competitive analysis
+                status_text.text('Generating competitive analysis...')
+                progress_bar.progress(90)
+                competitive_analysis = generate_competitive_analysis(company_name, stock_data, competitors_data)
 
                 progress_bar.progress(100)
                 status_text.text('Analysis complete!')
@@ -743,6 +1056,102 @@ if generate_button:
 
                 st.markdown("---")
 
+                # Display Competitive Analysis Section
+                st.markdown("### Competitive Analysis")
+
+                # Competitive Position Summary
+                comp_position = competitive_analysis.get('competitive_position', '')
+                if comp_position:
+                    st.markdown(f"""
+                    <div style="border-left: 5px solid #9b59b6; padding: 15px; background-color: rgba(155, 89, 182, 0.1); border-radius: 5px; margin-bottom: 15px;">
+                        <h4 style="margin-top: 0;">Competitive Position</h4>
+                        <p>{comp_position}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Competitor Comparison Table
+                if competitors_data:
+                    st.markdown("#### Key Competitors")
+
+                    # Build comparison data
+                    table_data = []
+                    for comp in competitors_data:
+                        row = {
+                            "Company": comp.get('name', 'N/A'),
+                            "Market Cap": format_market_cap(comp.get('market_cap')) if comp.get('market_cap') else "Private",
+                            "P/E Ratio": f"{comp.get('pe_ratio'):.1f}" if comp.get('pe_ratio') else "N/A",
+                            "1Y Return": f"{comp.get('year_return'):.1f}%" if comp.get('year_return') else "N/A",
+                            "Revenue": format_market_cap(comp.get('revenue')) if comp.get('revenue') else "N/A"
+                        }
+                        table_data.append(row)
+
+                    # Add target company to top of table for comparison
+                    if stock_data:
+                        target_row = {
+                            "Company": f"{display_name} (Target)",
+                            "Market Cap": format_market_cap(stock_data.get('market_cap')) if stock_data.get('market_cap') else "Private",
+                            "P/E Ratio": f"{stock_data.get('pe_ratio'):.1f}" if stock_data.get('pe_ratio') else "N/A",
+                            "1Y Return": f"{stock_data.get('year_return'):.1f}%" if stock_data.get('year_return') else "N/A",
+                            "Revenue": format_market_cap(stock_data.get('revenue')) if stock_data.get('revenue') else "N/A"
+                        }
+                        table_data.insert(0, target_row)
+
+                    # Display as DataFrame without index
+                    df = pd.DataFrame(table_data)
+                    st.dataframe(df, hide_index=True, use_container_width=True)
+
+                # Competitive Advantages and Disadvantages in two columns
+                adv_col, disadv_col = st.columns(2)
+
+                with adv_col:
+                    st.markdown("""
+                    <div style="background-color: rgba(40, 167, 69, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #28a745; font-weight: bold;">Competitive Advantages</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    advantages = competitive_analysis.get('competitive_advantages', [])
+                    if advantages:
+                        for adv in advantages:
+                            st.markdown(f"• {adv}")
+                    else:
+                        st.markdown("*No advantages identified*")
+
+                with disadv_col:
+                    st.markdown("""
+                    <div style="background-color: rgba(220, 53, 69, 0.2); padding: 10px 15px; border-radius: 8px 8px 0 0;">
+                        <span style="color: #dc3545; font-weight: bold;">Competitive Disadvantages</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    disadvantages = competitive_analysis.get('competitive_disadvantages', [])
+                    if disadvantages:
+                        for disadv in disadvantages:
+                            st.markdown(f"• {disadv}")
+                    else:
+                        st.markdown("*No disadvantages identified*")
+
+                st.markdown("")
+
+                # Key Differentiators
+                with st.expander("Key Differentiators", expanded=False):
+                    differentiators = competitive_analysis.get('key_differentiators', [])
+                    if differentiators:
+                        for diff in differentiators:
+                            st.markdown(f"- {diff}")
+
+                # Valuation Comparison
+                valuation_comp = competitive_analysis.get('valuation_comparison', '')
+                if valuation_comp:
+                    st.markdown("#### Valuation Comparison")
+                    st.markdown(valuation_comp)
+
+                # Competitive Outlook
+                comp_outlook = competitive_analysis.get('competitive_outlook', '')
+                if comp_outlook:
+                    st.markdown("#### Competitive Outlook")
+                    st.markdown(comp_outlook)
+
+                st.markdown("---")
+
                 # Display Strategic Recommendations in expandable section
                 strategic_recs = swot_data.get('strategic_recommendations', [])
                 if strategic_recs:
@@ -785,7 +1194,7 @@ if generate_button:
 
                 # Generate the PDF in the background
                 with st.spinner('Generating PDF...'):
-                    pdf_filename = save_pdf(company_name, swot_data, stock_data)
+                    pdf_filename = save_pdf(company_name, swot_data, stock_data, competitive_analysis, competitors_data)
 
                     # Read the PDF file
                     with open(pdf_filename, 'rb') as pdf_file:
