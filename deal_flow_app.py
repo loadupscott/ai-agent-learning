@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from datetime import datetime
 import streamlit as st
 import pandas as pd
@@ -63,85 +64,139 @@ Return ONLY the ticker symbol (with suffix if needed) or "PRIVATE", nothing else
 
 
 def fetch_stock_data(ticker):
-    """Use yfinance to fetch stock data for a given ticker."""
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+    """Use yfinance to fetch stock data for a given ticker with retry logic for rate limiting."""
+    max_retries = 3
+    retry_delay = 3  # seconds between retries
+    
+    for attempt in range(max_retries):
+        try:
+            # Add delay before each request to avoid rate limiting
+            if attempt > 0:
+                time.sleep(retry_delay * attempt)
+            
+            stock = yf.Ticker(ticker)
+            
+            # Try to get info with timeout handling
+            try:
+                info = stock.info
+            except Exception as info_error:
+                error_msg = str(info_error).lower()
+                if "rate limit" in error_msg or "too many requests" in error_msg or "429" in str(info_error):
+                    if attempt < max_retries - 1:
+                        continue  # Retry
+                    else:
+                        return None  # Give up after max retries
+                raise  # Re-raise if it's a different error
+            
+            # Check if we got rate limited (info will be empty or minimal)
+            if not info or len(info) < 5:
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    return None
 
-        # Get historical data for 1-year return calculation
-        hist = stock.history(period="1y")
-        year_return = None
-        if len(hist) >= 2:
-            start_price = hist['Close'].iloc[0]
-            end_price = hist['Close'].iloc[-1]
-            year_return = ((end_price - start_price) / start_price) * 100
+            # Get historical data for 1-year return calculation
+            try:
+                hist = stock.history(period="1y")
+            except Exception as hist_error:
+                error_msg = str(hist_error).lower()
+                if "rate limit" in error_msg or "too many requests" in error_msg or "429" in str(hist_error):
+                    if attempt < max_retries - 1:
+                        continue  # Retry
+                    else:
+                        # Continue without historical data
+                        hist = pd.DataFrame()
+                else:
+                    hist = pd.DataFrame()  # Continue without historical data
+            
+            year_return = None
+            if len(hist) >= 2:
+                start_price = hist['Close'].iloc[0]
+                end_price = hist['Close'].iloc[-1]
+                year_return = ((end_price - start_price) / start_price) * 100
 
-        # Get last trade time
-        last_trade_time = None
-        market_time = info.get("regularMarketTime")
-        if market_time:
-            last_trade_time = datetime.fromtimestamp(market_time).strftime("%b %d, %I:%M %p")
+            # Get last trade time
+            last_trade_time = None
+            market_time = info.get("regularMarketTime")
+            if market_time:
+                last_trade_time = datetime.fromtimestamp(market_time).strftime("%b %d, %I:%M %p")
 
-        # Get exchange and currency info
-        exchange = info.get("exchange", "")
-        currency = info.get("currency", "USD")
+            # Get exchange and currency info
+            exchange = info.get("exchange", "")
+            currency = info.get("currency", "USD")
 
-        # Map exchange codes to friendly names
-        exchange_names = {
-            "NMS": "NASDAQ",
-            "NYQ": "NYSE",
-            "NGM": "NASDAQ",
-            "TOR": "TSX",
-            "TSX": "TSX",
-            "VAN": "TSX-V",
-            "LSE": "LSE",
-            "LON": "LSE",
-            "FRA": "Frankfurt",
-            "PAR": "Euronext Paris",
-            "HKG": "HKEX",
-            "JPX": "Tokyo",
-            "TYO": "Tokyo",
-            "ASX": "ASX",
-        }
-        exchange_display = exchange_names.get(exchange, exchange)
+            # Map exchange codes to friendly names
+            exchange_names = {
+                "NMS": "NASDAQ",
+                "NYQ": "NYSE",
+                "NGM": "NASDAQ",
+                "TOR": "TSX",
+                "TSX": "TSX",
+                "VAN": "TSX-V",
+                "LSE": "LSE",
+                "LON": "LSE",
+                "FRA": "Frankfurt",
+                "PAR": "Euronext Paris",
+                "HKG": "HKEX",
+                "JPX": "Tokyo",
+                "TYO": "Tokyo",
+                "ASX": "ASX",
+            }
+            exchange_display = exchange_names.get(exchange, exchange)
 
-        # Currency symbols (use $ for USD and CAD since users know TSX is in CAD)
-        currency_symbols = {
-            "USD": "$",
-            "CAD": "$",
-            "GBP": "£",
-            "EUR": "€",
-            "JPY": "¥",
-            "HKD": "HK$",
-            "AUD": "A$",
-            "CHF": "CHF ",
-        }
-        currency_symbol = currency_symbols.get(currency, f"{currency} ")
+            # Currency symbols (use $ for USD and CAD since users know TSX is in CAD)
+            currency_symbols = {
+                "USD": "$",
+                "CAD": "$",
+                "GBP": "£",
+                "EUR": "€",
+                "JPY": "¥",
+                "HKD": "HK$",
+                "AUD": "A$",
+                "CHF": "CHF ",
+            }
+            currency_symbol = currency_symbols.get(currency, f"{currency} ")
 
-        return {
-            "current_price": info.get("currentPrice") or info.get("regularMarketPrice"),
-            "market_cap": info.get("marketCap"),
-            "year_return": year_return,
-            "pe_ratio": info.get("trailingPE"),
-            "forward_pe": info.get("forwardPE"),
-            "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
-            "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
-            "sector": info.get("sector"),
-            "industry": info.get("industry"),
-            "employees": info.get("fullTimeEmployees"),
-            "dividend_yield": info.get("trailingAnnualDividendYield") or (info.get("dividendYield") / 100 if info.get("dividendYield") and info.get("dividendYield") > 1 else info.get("dividendYield")),
-            "beta": info.get("beta"),
-            "revenue": info.get("totalRevenue"),
-            "profit_margin": info.get("profitMargins"),
-            "ticker": ticker,
-            "last_trade_time": last_trade_time,
-            "exchange": exchange_display,
-            "currency": currency,
-            "currency_symbol": currency_symbol
-        }
-    except Exception as e:
-        st.warning(f"Could not fetch stock data: {e}")
-        return None
+            return {
+                "current_price": info.get("currentPrice") or info.get("regularMarketPrice"),
+                "market_cap": info.get("marketCap"),
+                "year_return": year_return,
+                "pe_ratio": info.get("trailingPE"),
+                "forward_pe": info.get("forwardPE"),
+                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                "sector": info.get("sector"),
+                "industry": info.get("industry"),
+                "employees": info.get("fullTimeEmployees"),
+                "dividend_yield": info.get("trailingAnnualDividendYield") or (info.get("dividendYield") / 100 if info.get("dividendYield") and info.get("dividendYield") > 1 else info.get("dividendYield")),
+                "beta": info.get("beta"),
+                "revenue": info.get("totalRevenue"),
+                "profit_margin": info.get("profitMargins"),
+                "ticker": ticker,
+                "last_trade_time": last_trade_time,
+                "exchange": exchange_display,
+                "currency": currency,
+                "currency_symbol": currency_symbol
+            }
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check if it's a rate limit error
+            if "rate limit" in error_msg or "too many requests" in error_msg or "429" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue  # Retry
+                else:
+                    # Final attempt failed - return None gracefully
+                    return None
+            else:
+                # Different error - log and return None
+                if attempt == max_retries - 1:  # Only show warning on final attempt
+                    st.warning(f"Could not fetch stock data: {e}")
+                return None
+    
+    # If we get here, all retries failed
+    return None
 
 
 def format_market_cap(value):
